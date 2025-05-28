@@ -353,8 +353,12 @@ enum HgiShaderStageBits : HgiBits
     HgiShaderStagePostTessellationControl = 1 << 6,
     HgiShaderStagePostTessellationVertex = 1 << 7,
     HgiShaderStageCustomBitsBegin        = 1 << 8,
+    HgiShaderStageAll                    = 0xFFFFFFFF
+
 };
 using HgiShaderStage = HgiBits;
+
+inline const HgiShaderStage InputShaderStageBits = HgiShaderStageVertex | HgiShaderStageCompute | HgiShaderStagePostTessellationControl | HgiShaderStagePostTessellationVertex;
 
 /// \enum HgiBindResourceType
 ///
@@ -789,13 +793,16 @@ enum HgiStorageType
 ///   Indicates a shadow texture.</li>
 /// <li>HgiShaderTextureTypeArrayTexture:
 ///   Indicates an array texture.</li>
+/// <li>HgiShaderTextureTypeDepth:
+///   Indicates a depth texture.</li>
 /// </ul>
 ///
 enum HgiShaderTextureType
 {
     HgiShaderTextureTypeTexture = 0,
     HgiShaderTextureTypeShadowTexture,
-    HgiShaderTextureTypeArrayTexture
+    HgiShaderTextureTypeArrayTexture,
+    HgiShaderTextureTypeDepth
 };
 
 /// \enum HgiComputeDispatch
