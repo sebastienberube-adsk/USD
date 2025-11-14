@@ -24,7 +24,7 @@ TF_REGISTRY_FUNCTION(TfType)
     TfType::Define<Hgi>();
 }
 
-Hgi::Hgi()
+Hgi::Hgi(HgiDeviceFilter* filter)
     : _uniqueIdCounter(1)
 {
 }
@@ -42,8 +42,28 @@ Hgi::SubmitCmds(HgiCmds* cmds, HgiSubmitWaitType wait)
     }
 }
 
+static const std::unordered_map<std::string_view, TfToken> _hgiTypeToToken {
+    {"HgiGL", HgiTokens->OpenGL},
+    {"HgiMetal", HgiTokens->Metal},
+    {"HgiVulkan", HgiTokens->Vulkan},
+};
+
+static HgiDeviceFilter*
+_FindDeviceFilterForHgi(const HgiDeviceFilters& filters, const TfToken& hgiToken)
+{
+    HgiDeviceFilter* defaultFilter = nullptr;
+    for (const auto filter : filters) {
+        if (filter->GetTargetHgiName().IsEmpty()) {
+            defaultFilter = filter;
+        } else if (filter->GetTargetHgiName() == hgiToken) {
+            return filter;
+        }
+    }
+    return defaultFilter;
+}
+
 static Hgi*
-_MakeNewPlatformDefaultHgi()
+_MakeNewPlatformDefaultHgi(const HgiDeviceFilters& filters)
 {
     TF_DEBUG(HGI_DEBUG_INSTANCE_CREATION).Msg("Attempting to create platform "
         "default Hgi\n");
@@ -95,7 +115,9 @@ _MakeNewPlatformDefaultHgi()
         return nullptr;
     }
 
-    Hgi* instance = factory->New();
+    HgiDeviceFilter* filter = _FindDeviceFilterForHgi(filters,
+        _hgiTypeToToken.at(hgiType));
+    Hgi* instance = factory->New(filter);
     if (!instance) {
         TF_CODING_ERROR("[PluginLoad] Cannot construct instance of type '%s'\n",
                 plugType.GetTypeName().c_str());
@@ -120,7 +142,7 @@ _MakeNewPlatformDefaultHgi()
 }
 
 static Hgi*
-_MakeNamedHgi(const TfToken& hgiToken)
+_MakeNamedHgi(const TfToken& hgiToken, HgiDeviceFilter* filter)
 {
     TF_DEBUG(HGI_DEBUG_INSTANCE_CREATION).Msg("Attempting to create named Hgi "
         "%s\n", hgiToken.GetText());
@@ -140,7 +162,11 @@ _MakeNamedHgi(const TfToken& hgiToken)
         hgiType = "HgiMetal";
 #endif
     } else if (hgiToken.IsEmpty()) {
-        return _MakeNewPlatformDefaultHgi();
+        HgiDeviceFilters filters{};
+        if (filter) {
+            filters = {filter};
+        }
+        return _MakeNewPlatformDefaultHgi(filters);
     } else {
         // If an invalid token is provided, return nullptr.
         TF_CODING_ERROR("Unsupported token %s was provided.",
@@ -175,7 +201,19 @@ _MakeNamedHgi(const TfToken& hgiToken)
         return nullptr;
     }
 
-    Hgi* instance = factory->New();
+    if (filter) {
+        const auto targetHgi = filter->GetTargetHgiName();
+        if (!targetHgi.IsEmpty() &&
+            _hgiTypeToToken.at(hgiType.c_str()) != targetHgi) {
+            filter = nullptr;
+            TF_WARN("Wrong HgiDeviceFilter target for filter passed to "
+                "CreateNamedHgi(). Hgi: %s, HgiDeviceFilter: %s",
+            _hgiTypeToToken.at(hgiType.c_str()).GetText(),
+            targetHgi.GetText());
+        }
+    }
+
+    Hgi* instance = factory->New(filter);
     if (!instance) {
         TF_CODING_ERROR("[PluginLoad] Cannot construct instance of type '%s'\n",
             plugType.GetTypeName().c_str());
@@ -201,23 +239,23 @@ Hgi::GetPlatformDefaultHgi()
     TF_WARN("GetPlatformDefaultHgi is deprecated. "
             "Please use CreatePlatformDefaultHgi");
 
-    return _MakeNewPlatformDefaultHgi();
+    return _MakeNewPlatformDefaultHgi({});
 }
 
 HgiUniquePtr
-Hgi::CreatePlatformDefaultHgi()
+Hgi::CreatePlatformDefaultHgi(const HgiDeviceFilters& filters)
 {
-    return HgiUniquePtr(_MakeNewPlatformDefaultHgi());
+    return HgiUniquePtr(_MakeNewPlatformDefaultHgi(filters));
 }
 
 HgiUniquePtr 
-Hgi::CreateNamedHgi(const TfToken& hgiToken)
+Hgi::CreateNamedHgi(const TfToken& hgiToken, HgiDeviceFilter* filter)
 {
-    return HgiUniquePtr(_MakeNamedHgi(hgiToken));
+    return HgiUniquePtr(_MakeNamedHgi(hgiToken, filter));
 }
 
 bool
-Hgi::IsSupported(const TfToken& hgiToken)
+Hgi::IsSupported(const TfToken& hgiToken, const HgiDeviceFilters& filters)
 {
     // TODO: By current design, a Hgi instance is created and initialized as a 
     // method of confirming support on a platform. Once this is done, the 
@@ -227,9 +265,10 @@ Hgi::IsSupported(const TfToken& hgiToken)
 
     HgiUniquePtr instance = nullptr;
     if (hgiToken.IsEmpty()) {
-        instance = CreatePlatformDefaultHgi();
+        instance = CreatePlatformDefaultHgi(filters);
     } else {
-        instance = CreateNamedHgi(hgiToken);
+        HgiDeviceFilter* filter = _FindDeviceFilterForHgi(filters, hgiToken);
+        instance = CreateNamedHgi(hgiToken, filter);
     }
 
     if (instance) {

@@ -88,7 +88,7 @@ _RemoveUnsupportedInstanceExtensions(
     return extensions;
 }
 
-HgiVulkanInstance::HgiVulkanInstance()
+HgiVulkanInstance::HgiVulkanInstance(HgiVulkanDeviceFilter* filter)
     : vkDebugMessenger(nullptr)
     , vkCreateDebugUtilsMessengerEXT(nullptr)
     , vkDestroyDebugUtilsMessengerEXT(nullptr)
@@ -169,6 +169,10 @@ HgiVulkanInstance::HgiVulkanInstance()
                 VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
         }
     #endif
+
+    if (filter) {
+        filter->PreInstantiate(createInfo);
+    }
 
     HGIVULKAN_VERIFY_VK_RESULT(
         vkCreateInstance(
