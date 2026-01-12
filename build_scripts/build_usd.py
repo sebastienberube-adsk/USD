@@ -1510,6 +1510,12 @@ def InstallOpenSubdiv(context, force, buildArgs):
         # Use Metal for macOS and all Apple embedded systems.
         if MacOS():
             extraArgs.append('-DNO_OPENGL=ON')
+            if not MacOSTargetEmbedded(context):
+                # We still make GLSL available on macOS for any Hgi
+                # implementation that might need it. Implementations that layer
+                # on top of Metal, like WebGPU, MoltenVK or KosmicKrisp might
+                # not consume MSL directly.
+                extraArgs.append('-DOSD_PATCH_SHADER_SOURCE_GLSL=ON')
 
         # Add on any user-specified extra arguments.
         extraArgs += buildArgs
